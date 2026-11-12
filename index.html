@@ -1,0 +1,1091 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClaudeCAD - JR</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #22282f; }
+  body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #c9d1d9; }
+  [hidden] { display: none !important; }
+  #cadcraft_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
+  #cadcraft_loading { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px;
+    align-items: center; justify-content: center; text-align: center; padding: 24px; pointer-events: none; }
+  #cadcraft_loading.failed { pointer-events: auto; background: #22282f; }
+  #cadcraft_loading h1 { margin: 0; font-size: 18px; font-weight: 600; color: #e6edf3; }
+  #cadcraft_loading p { margin: 0; max-width: 46ch; }
+  #cadcraft_loading a { color: #58a6ff; }
+  .bar { width: min(280px, 70vw); height: 4px; border-radius: 2px; background: #30363d; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: #14a3c7; transition: width .2s; }
+  #toast { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); max-width: min(90vw, 520px);
+    padding: 9px 14px; border-radius: 8px; background: #161b22; border: 1px solid #30363d; color: #e6edf3;
+    box-shadow: 0 6px 24px rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 5; }
+  #toast.show { opacity: 1; }
+  #toast.error { border-color: #f85149; }
+  #sel_badge { position: absolute; right: 8px; top: 86px; max-width: min(70vw, 360px); padding: 3px 10px; border-radius: 6px;
+    background: #161b22; border: 1px solid #1f7fa3; color: #e6edf3; font-size: 12px; font-variant-numeric: tabular-nums;
+    pointer-events: none; z-index: 3; }
+
+  /* Cloud file drawer */
+  #files_tab { position: absolute; right: 8px; top: 57px; padding: 1px 12px; font: inherit; font-size: 13px; font-weight: 600;
+    color: #e6edf3; background: #14506a; border: 1px solid #1f7fa3; border-radius: 6px; cursor: pointer; z-index: 3; }
+  #files_tab:hover { background: #1a6382; }
+  #files_panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(350px, 100vw); box-sizing: border-box;
+    display: flex; flex-direction: column; background: #161b22; border-left: 1px solid #30363d;
+    box-shadow: -8px 0 28px rgba(0,0,0,.45); z-index: 4; }
+  #files_panel header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #30363d; }
+  #files_panel h2 { margin: 0; flex: 1; font-size: 15px; font-weight: 600; color: #e6edf3; }
+  #files_panel h3 { margin: 14px 14px 4px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #8b98a8; }
+  .folder { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; margin: 0; padding: 10px 14px;
+    font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; text-align: left;
+    color: #c9d1d9; background: none; border: 0; border-bottom: 1px solid #262d36; cursor: pointer; }
+  .folder:hover { background: #1c2733; }
+  .folder:focus-visible { outline: 2px solid #58a6ff; outline-offset: -2px; }
+  .folder .caret { width: 10px; color: #8b98a8; }
+  .folder .count { margin-left: auto; color: #8b98a8; font-weight: 400; letter-spacing: 0; }
+  .folder_body { padding: 4px 0 8px 12px; border-bottom: 1px solid #262d36; }
+  .section { margin: 0; padding: 10px 14px 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #14a3c7; }
+  #pc_section { border-top: 1px solid #30363d; max-height: 35%; overflow-y: auto; }
+  #pc_section .actions { padding: 0 14px 10px; }
+  #files_note { margin: 0; padding: 10px 14px; color: #8b98a8; }
+  #files_list { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 10px; }
+  .file { display: flex; flex-direction: column; gap: 6px; padding: 8px 14px; }
+  .file.current { background: #1c2733; }
+  .file .name { color: #e6edf3; overflow-wrap: anywhere; }
+  .file .meta { font-size: 12px; color: #8b98a8; font-variant-numeric: tabular-nums; }
+  .file .actions, #save_form .actions, #files_panel footer { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btn { font: inherit; font-size: 13px; color: #e6edf3; background: #232b35; border: 1px solid #3a4553;
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .btn:hover { background: #2c3642; }
+  .btn.primary { background: #14a3c7; border-color: #14a3c7; color: #06222b; font-weight: 600; }
+  .btn.primary:hover { background: #2bb6d9; }
+  .btn.danger { border-color: #f85149; color: #ffb4ae; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn:focus-visible, #files_tab:focus-visible, #save_form input:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+  #files_close { font-size: 18px; line-height: 1; padding: 2px 9px; }
+  #save_form { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px 14px; background: #1c2733; border-bottom: 1px solid #30363d; }
+  #save_form strong { color: #e6edf3; }
+  #save_form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #8b98a8; }
+  #save_form input { font: inherit; color: #e6edf3; background: #0f141a; border: 1px solid #3a4553; border-radius: 6px; padding: 6px 8px; }
+  #files_panel footer { padding: 10px 14px; border-top: 1px solid #30363d; }
+  #pc_file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .bar > i, #toast { transition: none; } }
+</style>
+</head>
+<body>
+<canvas id="cadcraft_canvas" data-host="page" tabindex="0"></canvas>
+<div id="cadcraft_loading">
+  <h1>Opening the CAD program…</h1>
+  <div class="bar"><i id="progress"></i></div>
+  <p id="loading_note">Downloading the program (about 8 MB)…</p>
+</div>
+
+<button id="files_tab" type="button">File Explorer</button>
+<aside id="files_panel" aria-label="File Explorer" hidden>
+  <header>
+    <h2>File Explorer</h2>
+    <button class="btn" id="files_close" type="button" aria-label="Close">&times;</button>
+  </header>
+  <form id="save_form" hidden>
+    <strong>Save this drawing</strong>
+    <label>Name<input id="save_name" type="text" autocomplete="off" required></label>
+    <label>Project<input id="save_obra" type="text" autocomplete="off" list="obra_list" placeholder="e.g. Hotel Muthu"></label>
+    <datalist id="obra_list"></datalist>
+    <div class="actions">
+      <button class="btn primary" id="save_cloud" type="submit">Save to cloud</button>
+      <button class="btn" id="save_export" type="button">Export to PC</button>
+      <button class="btn" id="save_cancel" type="button">Cancel</button>
+    </div>
+  </form>
+  <h3 class="section">Cloud files</h3>
+  <p id="files_note">Loading files…</p>
+  <div id="files_list"></div>
+  <section id="pc_section" aria-label="PC files">
+    <h3 class="section">PC files</h3>
+    <div id="pc_list"></div>
+    <div class="actions"><label class="btn" for="pc_file">Open from PC</label></div>
+  </section>
+  <footer>
+    <button class="btn" id="app_zip" type="button">Download app (zip)</button>
+    <input id="pc_file" type="file" accept=".dxf">
+  </footer>
+</aside>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="sel_badge" hidden></div>
+
+<script type="module">
+// CADCraft (github.com/storytold/cadcraft, MIT OR Apache-2.0) compiled to WebAssembly and hosted
+// in "page" mode: the page opens drawings in it and receives every file it saves.
+// The optimized wasm, gzip-compressed (the page inflates it; raw it is over the per-file size limit).
+const WASM_URL = "./cadcraft-web_bg.gz.wasm";
+const GLUE_URL = "./cadcraft-web.js";
+const SAMPLE_URL = "./Drawing1.dxf.txt";
+const SAMPLE_NAME = "JR.dxf";
+
+// English only. The program follows the browser language unless a language was picked in its own
+// settings, so report English as the browser language and read any saved language choice as English.
+try {
+  const english = Object.freeze(["en-US", "en"]);
+  Object.defineProperty(navigator, "languages", { configurable: true, get: () => english });
+  Object.defineProperty(navigator, "language", { configurable: true, get: () => "en-US" });
+} catch (error) { console.warn("language override failed:", error); }
+try {
+  const readItem = Storage.prototype.getItem;
+  Storage.prototype.getItem = function (key) {
+    const value = readItem.call(this, key);
+    if (typeof value !== "string" || !String(key).startsWith("cadcraft.")) return value;
+    return value.replace(/("[^"]*lang[^"]*"\s*:\s*)"(?!en"|auto")[A-Za-z-]{2,5}"/gi, '$1"en"');
+  };
+} catch (error) { console.warn("saved language guard failed:", error); }
+
+const canvas = document.getElementById("cadcraft_canvas");
+const loading = document.getElementById("cadcraft_loading");
+const progress = document.getElementById("progress");
+const toastEl = document.getElementById("toast");
+let toastTimer = 0;
+
+function toast(text, isError) {
+  toastEl.textContent = text;
+  toastEl.className = "show" + (isError ? " error" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.className = ""; }, isError ? 9000 : 6000);
+}
+
+function fail(error) {
+  console.error("CADCraft failed to start:", error);
+  const box = document.getElementById("cadcraft_loading") || document.body.appendChild(loading);
+  box.className = "failed";
+  box.innerHTML = "<h1>The CAD program did not start</h1>" +
+    "<p>This browser could not open the program (it needs WebGL2 or WebGPU). " +
+    "You can use the <a href=\"./viewer.html\">simple viewer</a>.</p><p id=\"fail_detail\"></p>";
+  document.getElementById("fail_detail").textContent = String(error && error.message || error);
+}
+
+// Download the compressed wasm with a progress bar, inflate it, and hand the bytes to the glue.
+async function fetchWasm() {
+  if (typeof DecompressionStream !== "function") throw new Error("this browser has no DecompressionStream");
+  const response = await fetch(WASM_URL);
+  if (!response.ok) throw new Error("wasm: HTTP " + response.status);
+  const total = Number(response.headers.get("content-length")) || 0;
+  let packed;
+  if (response.body && total) {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      progress.style.width = Math.min(100, (received / total) * 100) + "%";
+    }
+    packed = new Blob(chunks);
+  } else {
+    packed = await response.blob();
+  }
+  progress.style.width = "100%";
+  const inflated = packed.stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(inflated).arrayBuffer());
+}
+
+function capability(name) {
+  return (window.claude && typeof window.claude.use === "function")
+    ? window.claude.use(name).catch(() => null)
+    : Promise.resolve(null);
+}
+
+// ---------- Export to the PC (only on request) ----------
+function mimeFor(name) {
+  const ext = name.toLowerCase().split(".").pop();
+  return { dxf: "image/vnd.dxf", dwg: "image/vnd.dwg", svg: "image/svg+xml", pdf: "application/pdf", png: "image/png" }[ext]
+    || "application/octet-stream";
+}
+
+// The host only lets these file types through; anything else (DXF, DWG) is saved inside a zip.
+const ALLOWED_EXT = new Set(["gif", "png", "jpg", "jpeg", "webp", "mp4", "webm", "txt", "json", "md",
+  "docx", "pptx", "epub", "csv", "ttf", "html", "svg", "pdf", "xlsx", "zip", "fig"]);
+
+function extensionOf(name) {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+let crcTable = null;
+function crc32(bytes) {
+  if (!crcTable) {
+    crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      crcTable[n] = c >>> 0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) crc = crcTable[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+// Build a zip archive holding one file (deflated when the browser can, stored otherwise).
+async function zipSingleFile(name, bytes) {
+  let method = 0;
+  let packed = bytes;
+  if (typeof CompressionStream === "function") {
+    try {
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+      const deflated = new Uint8Array(await new Response(stream).arrayBuffer());
+      if (deflated.length < bytes.length) { method = 8; packed = deflated; }
+    } catch (error) { /* keep the stored copy */ }
+  }
+  const nameBytes = new TextEncoder().encode(name);
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((Math.max(1980, now.getFullYear()) - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const crc = crc32(bytes);
+
+  const local = new DataView(new ArrayBuffer(30));
+  local.setUint32(0, 0x04034b50, true);
+  local.setUint16(4, 20, true);        // version needed
+  local.setUint16(6, 0x0800, true);    // UTF-8 file name
+  local.setUint16(8, method, true);
+  local.setUint16(10, dosTime, true);
+  local.setUint16(12, dosDate, true);
+  local.setUint32(14, crc, true);
+  local.setUint32(18, packed.length, true);
+  local.setUint32(22, bytes.length, true);
+  local.setUint16(26, nameBytes.length, true);
+
+  const central = new DataView(new ArrayBuffer(46));
+  central.setUint32(0, 0x02014b50, true);
+  central.setUint16(4, 20, true);      // version made by
+  central.setUint16(6, 20, true);      // version needed
+  central.setUint16(8, 0x0800, true);
+  central.setUint16(10, method, true);
+  central.setUint16(12, dosTime, true);
+  central.setUint16(14, dosDate, true);
+  central.setUint32(16, crc, true);
+  central.setUint32(20, packed.length, true);
+  central.setUint32(24, bytes.length, true);
+  central.setUint16(28, nameBytes.length, true);
+  // extra, comment, disk number, attributes and local header offset stay zero
+
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, 1, true);
+  end.setUint16(10, 1, true);
+  end.setUint32(12, 46 + nameBytes.length, true);
+  end.setUint32(16, 30 + nameBytes.length + packed.length, true);
+
+  return new Blob([local, nameBytes, packed, central, nameBytes, end], { type: "application/zip" });
+}
+
+async function exportToPc(name, bytes) {
+  const downloads = await capability("downloads");
+  if (downloads) {
+    let filename = name;
+    let data = new Blob([bytes], { type: mimeFor(name) });
+    const zipped = !ALLOWED_EXT.has(extensionOf(name));
+    if (zipped) {
+      const dot = name.lastIndexOf(".");
+      filename = (dot > 0 ? name.slice(0, dot) : name) + ".zip";
+      data = await zipSingleFile(name, bytes);
+    }
+    try {
+      await downloads.save({ filename, data });
+      toast(zipped ? "Exported: " + filename + " (" + name + " is inside)" : "Exported: " + filename);
+    } catch (error) {
+      const code = error && error.code;
+      if (code === "declined") toast("Export cancelled.");
+      else if (code === "rate_limited") toast("A save request is already open. Answer it and try again.", true);
+      else toast("Not exported: " + String(error && error.message || error), true);
+    }
+    return;
+  }
+  // No downloads capability in this view: fall back to a plain browser download.
+  try {
+    const url = URL.createObjectURL(new Blob([bytes], { type: mimeFor(name) }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast("Downloading: " + name);
+  } catch (error) {
+    toast("Could not download " + name, true);
+  }
+}
+
+// ---------- Download the whole app as a zip (page, engine, licences) ----------
+const APP_FILES = ["index.html", "README.md", "cadcraft-web.js", "cadcraft-web_bg.gz.wasm", "viewer.html", "Drawing1.dxf.txt",
+  "LICENSE-MIT.txt", "LICENSE-APACHE.txt", "NOTICE.txt", "snippets/eframe-d31a8450ea12dfc1/inline0.js"];
+
+// Build a zip archive (stored, no compression: the engine is already gzip-compressed).
+function zipFiles(entries) {
+  const parts = [], central = [];
+  let offset = 0;
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((Math.max(1980, now.getFullYear()) - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  for (const { name, bytes } of entries) {
+    const nameBytes = new TextEncoder().encode(name);
+    const crc = crc32(bytes);
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);
+    local.setUint16(6, 0x0800, true);
+    local.setUint16(10, dosTime, true);
+    local.setUint16(12, dosDate, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, bytes.length, true);
+    local.setUint32(22, bytes.length, true);
+    local.setUint16(26, nameBytes.length, true);
+    const head = new DataView(new ArrayBuffer(46));
+    head.setUint32(0, 0x02014b50, true);
+    head.setUint16(4, 20, true);
+    head.setUint16(6, 20, true);
+    head.setUint16(8, 0x0800, true);
+    head.setUint16(12, dosTime, true);
+    head.setUint16(14, dosDate, true);
+    head.setUint32(16, crc, true);
+    head.setUint32(20, bytes.length, true);
+    head.setUint32(24, bytes.length, true);
+    head.setUint16(28, nameBytes.length, true);
+    head.setUint32(42, offset, true);
+    parts.push(local, nameBytes, bytes);
+    central.push(head, nameBytes);
+    offset += 30 + nameBytes.length + bytes.length;
+  }
+  const centralSize = central.reduce((n, part) => n + part.byteLength, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, entries.length, true);
+  end.setUint16(10, entries.length, true);
+  end.setUint32(12, centralSize, true);
+  end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end], { type: "application/zip" });
+}
+
+async function fetchAppFile(name) {
+  const tries = name === "index.html" ? ["./index.html", "./"] : ["./" + name];
+  for (const url of tries) {
+    const response = await fetch(url);
+    if (response.ok) return new Uint8Array(await response.arrayBuffer());
+  }
+  throw new Error(name + " not found");
+}
+
+async function downloadApp(el) {
+  el.disabled = true;
+  const label = el.textContent;
+  el.textContent = "Preparing zip…";
+  try {
+    const entries = [];
+    // Package the generic JR sample shipped with this project.
+    for (const name of APP_FILES) {
+      const source = name;
+      entries.push({ name: "ClaudeCAD/" + name, bytes: await fetchAppFile(source) });
+    }
+    const data = zipFiles(entries);
+    const filename = "Claude_ClaudeCAD.zip";
+    const downloads = await capability("downloads");
+    if (downloads) {
+      try {
+        await downloads.save({ filename, data });
+        toast("Exported: " + filename);
+      } catch (error) {
+        if (error && error.code === "declined") toast("Export cancelled.");
+        else toast("Not exported: " + String(error && error.message || error), true);
+      }
+    } else {
+      const url = URL.createObjectURL(data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast("Downloading: " + filename);
+    }
+  } catch (error) {
+    toast("Could not build the zip: " + String(error && error.message || error), true);
+  } finally {
+    el.disabled = false;
+    el.textContent = label;
+  }
+}
+
+// ---------- Cloud files: bytes in the artifact's asset store, one "drawings" row per file ----------
+const panel = document.getElementById("files_panel");
+const listEl = document.getElementById("files_list");
+const noteEl = document.getElementById("files_note");
+const saveForm = document.getElementById("save_form");
+const saveName = document.getElementById("save_name");
+const saveObra = document.getElementById("save_obra");
+const NO_OBRA = "No project";
+// Folder open/closed state; a folder never toggled starts open only if it holds the drawing on screen.
+const folderState = new Map();
+function isFolderOpen(obra) {
+  if (folderState.has(obra)) return folderState.get(obra);
+  return !!current && (current.obra || NO_OBRA) === obra;
+}
+function toggleFolder(obra) { folderState.set(obra, !isFolderOpen(obra)); renderList(); }
+
+let db = null;
+let assets = null;
+let cloudState = "loading";   // loading | ready | off
+let drawings = [];            // [{id, name, obra, asset, enc, size, savedAt, by}]
+let projects = [];            // [{id, name}]: projects listed even before they hold a drawing
+let current = null;           // the cloud row open in the app, if any
+let pending = null;           // {name, bytes} waiting for the save form
+let appReady = false;
+let initialOpened = false;
+let lastObra = "";
+
+function openInApp(name, bytes) {
+  canvas.dispatchEvent(new CustomEvent("cadcraft:open", { detail: { name, bytes } }));
+}
+
+async function readStored(row) {
+  const response = await fetch("/_blob/" + row.asset);
+  if (!response.ok) throw new Error("HTTP " + response.status);
+  if (row.enc === "base64") {
+    const packed = atob((await response.json()).data);
+    const bytes = new Uint8Array(packed.length);
+    for (let i = 0; i < packed.length; i++) bytes[i] = packed.charCodeAt(i);
+    return bytes;
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+// DXF text goes up as plain text; anything that is not valid UTF-8 (binary DXF, old code pages) is wrapped in JSON.
+async function storeBytes(bytes) {
+  try {
+    const result = await assets.upload(new Blob([bytes]), { type: "text/plain" });
+    return { asset: result.id, enc: "text" };
+  } catch (error) {
+    if (!error || error.code !== "invalid_request") throw error;
+  }
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  const wrapped = JSON.stringify({ encoding: "base64", data: btoa(binary) });
+  const result = await assets.upload(new Blob([wrapped]), { type: "application/json" });
+  return { asset: result.id, enc: "base64" };
+}
+
+async function saveToCloud(name, obra, bytes) {
+  const stored = await storeBytes(bytes);
+  const body = { name, obra, asset: stored.asset, enc: stored.enc, size: bytes.length, savedAt: new Date().toISOString(), by: "app" };
+  const existing = drawings.find((row) => row.name === name && (row.obra || "") === obra);
+  let id;
+  if (existing) {
+    id = existing.id;
+    await db.doc("drawings/" + id).set(body);
+    try { await assets.delete(existing.asset); } catch (error) { console.warn("old copy not removed:", error); }
+  } else {
+    id = (await db.collection("drawings").add(body)).id;
+  }
+  current = { id, ...body };
+  lastObra = obra;
+  toast("Saved to cloud: " + name + (obra ? " (" + obra + ")" : ""));
+  renderList();
+}
+
+function cloudError(error) {
+  const code = error && error.code;
+  if (code === "quota_or_state" || code === "quota_exceeded") return "cloud storage is full. Delete old files.";
+  if (code === "too_large") return "the file is too large (20 MB maximum).";
+  return String(error && error.message || error);
+}
+
+function formatSize(bytes) {
+  return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(bytes / 1024)) + " KB";
+}
+
+function formatDate(iso) {
+  const date = new Date(iso);
+  if (isNaN(date)) return "";
+  return date.toLocaleDateString("en-GB") + " " + date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function button(label, className, onClick) {
+  const el = document.createElement("button");
+  el.type = "button";
+  el.className = "btn" + (className ? " " + className : "");
+  el.textContent = label;
+  el.addEventListener("click", () => onClick(el));
+  return el;
+}
+
+async function withBusy(el, work) {
+  el.disabled = true;
+  try { await work(); } finally { el.disabled = false; }
+}
+
+function renderList() {
+  listEl.textContent = "";
+  if (cloudState === "loading") { noteEl.textContent = "Loading files…"; noteEl.hidden = false; return; }
+  if (cloudState === "off") {
+    noteEl.textContent = "The cloud is not available in this view. Open the app inside Claude, signed in to your account.";
+    noteEl.hidden = false;
+    return;
+  }
+  if (!drawings.length && !projects.length) {
+    noteEl.textContent = "No saved drawings yet. Use SAVE in the program and choose \"Save to cloud\".";
+    noteEl.hidden = false;
+    return;
+  }
+  noteEl.hidden = true;
+
+  const groups = new Map();
+  drawings.forEach((row) => {
+    const key = row.obra || NO_OBRA;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+  projects.forEach((project) => {
+    if (project.name && !groups.has(project.name)) groups.set(project.name, []);
+  });
+  const names = Array.from(groups.keys()).sort((a, b) => (a === NO_OBRA) - (b === NO_OBRA) || a.localeCompare(b, "pt"));
+
+  const obraList = document.getElementById("obra_list");
+  obraList.textContent = "";
+  names.filter((name) => name !== NO_OBRA).forEach((name) => {
+    const option = document.createElement("option");
+    option.value = name;
+    obraList.append(option);
+  });
+
+  names.forEach((obra) => {
+    const open = isFolderOpen(obra);
+    const heading = document.createElement("button");
+    heading.type = "button";
+    heading.className = "folder";
+    heading.setAttribute("aria-expanded", String(open));
+    const caret = document.createElement("span");
+    caret.className = "caret";
+    caret.textContent = open ? "▾" : "▸";
+    const label = document.createElement("span");
+    label.textContent = obra;
+    const count = document.createElement("span");
+    count.className = "count";
+    count.textContent = String(groups.get(obra).length);
+    heading.append(caret, label, count);
+    heading.addEventListener("click", () => toggleFolder(obra));
+    listEl.append(heading);
+    const box = document.createElement("div");
+    box.className = "folder_body";
+    box.hidden = !open;
+    listEl.append(box);
+    if (!groups.get(obra).length) {
+      const empty = document.createElement("div");
+      empty.className = "file meta";
+      empty.textContent = "No drawings yet";
+      box.append(empty);
+    }
+    groups.get(obra).sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt))).forEach((row) => {
+      const item = document.createElement("div");
+      item.className = "file" + (current && current.id === row.id ? " current" : "");
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = row.name;
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = [formatDate(row.savedAt), formatSize(row.size || 0), row.by === "claude" ? "added by Claude" : ""].filter(Boolean).join(" · ");
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      actions.append(
+        button("Open", "primary", (el) => withBusy(el, () => openStored(row))),
+        button("Export to PC", "", (el) => withBusy(el, async () => {
+          try { await exportToPc(row.name, await readStored(row)); }
+          catch (error) { toast("Could not read the file from the cloud: " + cloudError(error), true); }
+        })),
+        button("Delete", "", (el) => {
+          if (el.dataset.armed !== "1") {
+            el.dataset.armed = "1";
+            el.textContent = "Delete for sure?";
+            el.classList.add("danger");
+            setTimeout(() => { el.dataset.armed = ""; el.textContent = "Delete"; el.classList.remove("danger"); }, 4000);
+            return;
+          }
+          withBusy(el, () => deleteStored(row));
+        }),
+      );
+      item.append(name, meta, actions);
+      box.append(item);
+    });
+  });
+}
+
+async function openStored(row, quiet) {
+  try {
+    openInApp(row.name, await readStored(row));
+    current = row;
+    lastObra = row.obra || "";
+    renderList();
+    if (!quiet) { closePanel(); toast("Opened: " + row.name); }
+  } catch (error) {
+    toast("Could not open " + row.name + ": " + cloudError(error), true);
+  }
+}
+
+async function deleteStored(row) {
+  try {
+    await db.doc("drawings/" + row.id).delete();
+    try { await assets.delete(row.asset); } catch (error) { console.warn("asset not removed:", error); }
+    if (current && current.id === row.id) current = null;
+    toast("Deleted from cloud: " + row.name);
+  } catch (error) {
+    toast("Not deleted: " + cloudError(error), true);
+  }
+}
+
+async function openSample() {
+  try {
+    const response = await fetch(SAMPLE_URL);
+    if (!response.ok) return;
+    openInApp(SAMPLE_NAME, new Uint8Array(await response.arrayBuffer()));
+  } catch (error) {
+    console.warn("sample drawing not opened:", error);
+  }
+}
+
+// Start on the most recently saved cloud drawing, or on the sample when there is none.
+function openInitial(force) {
+  if (initialOpened || !appReady) return;
+  if (cloudState === "loading" && !force) return;
+  initialOpened = true;
+  const latest = drawings.slice().sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)))[0];
+  if (latest) openStored(latest, true); else openSample();
+}
+
+// ---------- Jobs left by Claude on a drawing row (field "job") ----------
+const runningJobs = new Set();
+
+function bytesToLatin1(bytes) {
+  let text = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return text;
+}
+
+function latin1ToBytes(text) {
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 0xFF;
+  return bytes;
+}
+
+// Move every entity (model space, layouts and block definitions) of an ASCII DXF to one layer,
+// creating the layer as a copy of layer "0" when the drawing does not have it.
+function setLayerAll(bytes, layer) {
+  const text = bytesToLatin1(bytes);
+  if (text.startsWith("AutoCAD Binary DXF")) throw new Error("binary DXF is not supported by this job");
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = text.split(/\r?\n/);
+  const wanted = layer.toLowerCase();
+  let section = "", table = "", expectSection = false, expectTable = false;
+  let inRecord = false, recordStart = -1, recordName = null;
+  let zeroStart = -1, zeroEnd = -1, hasLayer = false;
+  let countAt = -1, handseedAt = -1, maxHandle = 0n, count = 0;
+
+  for (let i = 0; i + 1 < lines.length; i += 2) {
+    const code = lines[i].trim();
+    const value = lines[i + 1].trim();
+    if (code === "0") {
+      if (inRecord) {
+        if ((recordName || "").toLowerCase() === wanted) hasLayer = true;
+        if (recordName === "0") { zeroStart = recordStart; zeroEnd = i; }
+        inRecord = false;
+      }
+      if (value === "SECTION") expectSection = true;
+      else if (value === "ENDSEC") section = "";
+      else if (value === "TABLE") expectTable = true;
+      else if (value === "ENDTAB") table = "";
+      else if (section === "TABLES" && table === "LAYER" && value === "LAYER") { inRecord = true; recordStart = i; recordName = null; }
+    } else if (code === "2") {
+      if (expectSection) { section = value; expectSection = false; }
+      else if (expectTable) { table = value; expectTable = false; }
+      else if (inRecord && recordName === null) recordName = value;
+    } else if (code === "70" && section === "TABLES" && table === "LAYER" && !inRecord && countAt < 0) {
+      countAt = i + 1;
+    } else if (code === "9" && value === "$HANDSEED" && i + 3 < lines.length && lines[i + 2].trim() === "5") {
+      handseedAt = i + 3;
+    } else if ((code === "5" || code === "105") && section !== "HEADER" && /^[0-9A-Fa-f]+$/.test(value)) {
+      const handle = BigInt("0x" + value);
+      if (handle > maxHandle) maxHandle = handle;
+    } else if (code === "8" && (section === "ENTITIES" || section === "BLOCKS")) {
+      lines[i + 1] = layer;
+      count++;
+    }
+  }
+
+  if (!hasLayer && zeroStart >= 0) {
+    let handle = maxHandle + 1n;
+    if (handseedAt >= 0 && /^[0-9A-Fa-f]+$/.test(lines[handseedAt].trim())) {
+      const seed = BigInt("0x" + lines[handseedAt].trim());
+      if (seed > handle) handle = seed;
+    }
+    const record = [];
+    let usedHandle = false, inGroup = false;
+    for (let i = zeroStart; i < zeroEnd; i += 2) {
+      const code = lines[i].trim();
+      let value = lines[i + 1];
+      if (code === "102") { inGroup = !value.trim().startsWith("}"); continue; }
+      if (inGroup) continue;
+      if (code === "2") value = layer;
+      if (code === "5") { value = handle.toString(16).toUpperCase(); usedHandle = true; }
+      record.push(lines[i], value);
+    }
+    if (usedHandle && handseedAt >= 0) lines[handseedAt] = (handle + 1n).toString(16).toUpperCase();
+    if (countAt >= 0 && /^\d+$/.test(lines[countAt].trim())) {
+      lines[countAt] = String(Number(lines[countAt].trim()) + 1).padStart(lines[countAt].length, " ");
+    }
+    lines.splice(zeroEnd, 0, ...record);
+  }
+  return { bytes: latin1ToBytes(lines.join(eol)), count };
+}
+
+async function runJob(row) {
+  if (runningJobs.has(row.id)) return;
+  runningJobs.add(row.id);
+  const { id, job, jobError, ...rest } = row;
+  try {
+    // Clear the job first, so a failure never repeats it on every load.
+    await db.doc("drawings/" + id).set(rest);
+    if (!job || job.op !== "set_layer_all" || !job.layer) throw new Error("unknown job: " + (job && job.op));
+    const result = setLayerAll(await readStored(row), String(job.layer));
+    const stored = await storeBytes(result.bytes);
+    const body = { name: job.name || row.name, obra: row.obra || "", asset: stored.asset, enc: stored.enc,
+      size: result.bytes.length, savedAt: new Date().toISOString(), by: "claude" };
+    const newId = (await db.collection("drawings").add(body)).id;
+    if (appReady) {
+      openInApp(body.name, result.bytes);
+      current = { id: newId, ...body };
+      lastObra = body.obra;
+      renderList();
+    }
+    toast("Claude: " + result.count + " objects moved to layer " + job.layer + " → " + body.name);
+  } catch (error) {
+    console.warn("job failed:", error);
+    toast("Claude's request failed on " + row.name + ": " + cloudError(error), true);
+    try { await db.doc("drawings/" + id).set({ ...rest, jobError: String(error && error.message || error) }); } catch (e) { /* keep the toast */ }
+  } finally {
+    runningJobs.delete(row.id);
+  }
+}
+
+async function initCloud() {
+  [db, assets] = await Promise.all([capability("db"), capability("assets")]);
+  if (!db || !assets) { cloudState = "off"; renderList(); openInitial(); return; }
+  watchCommands();
+  db.collection("projects").onSnapshot((snapshot) => {
+    projects = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    renderList();
+  }, (error) => console.warn("project list failed:", error));
+  const slow = setTimeout(() => {
+    if (cloudState === "loading") { noteEl.textContent = "The cloud has not answered yet. Still trying…"; noteEl.hidden = false; }
+  }, 10000);
+  db.collection("drawings").onSnapshot((snapshot) => {
+    clearTimeout(slow);
+    drawings = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    cloudState = "ready";
+    drawings.filter((row) => row.job).forEach(runJob);
+    if (current) current = drawings.find((row) => row.id === current.id) || current;
+    renderList();
+    openInitial();
+  }, (error) => {
+    clearTimeout(slow);
+    console.warn("cloud list failed:", error);
+    cloudState = "off";
+    renderList();
+    openInitial();
+  });
+}
+
+// ---------- Live link with Claude: what is selected, and commands Claude leaves for the program (2026-11-11) ----------
+const selBadge = document.getElementById("sel_badge");
+const COMMAND_MAX_AGE_MS = 10 * 60 * 1000;
+let appVersion = "";
+let liveKey = null;
+let liveBusy = false;
+let commandRows = [];
+const runningCommands = new Set();
+
+function entityLength(g) {
+  if (!g) return 0;
+  if (g.type === "line" && g.a && g.b) return Math.hypot(g.b.x - g.a.x, g.b.y - g.a.y, (g.b.z || 0) - (g.a.z || 0));
+  if (g.type === "circle") return 2 * Math.PI * g.radius;
+  if (g.type === "arc") {
+    let sweep = (g.end - g.start) % (2 * Math.PI);
+    if (sweep <= 0) sweep += 2 * Math.PI;
+    return g.radius * sweep;
+  }
+  if (g.type === "lwPolyline" && Array.isArray(g.vertices)) {
+    const v = g.vertices;
+    const segments = g.closed ? v.length : v.length - 1;
+    let total = 0;
+    for (let i = 0; i < segments; i++) {
+      const p = v[i].p, q = v[(i + 1) % v.length].p;
+      const chord = Math.hypot(q.x - p.x, q.y - p.y);
+      const bulge = Math.abs(v[i].bulge || 0);
+      total += bulge ? chord * Math.atan(bulge) * (1 + bulge * bulge) / bulge : chord;
+    }
+    return total;
+  }
+  return 0;
+}
+
+function round3(value) { return Math.round(value * 1000) / 1000; }
+
+function tally(map, key, length) {
+  if (!map[key]) map[key] = { count: 0, length: 0 };
+  map[key].count++;
+  map[key].length = round3(map[key].length + length);
+}
+
+function showSelection(count, totalLength) {
+  if (!selBadge) return;
+  if (!count) { selBadge.hidden = true; return; }
+  selBadge.textContent = count + " selected" + (totalLength ? " · length " + totalLength.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "");
+  selBadge.hidden = false;
+}
+
+// Ask the program what is selected; when it changed, show it and leave a report in "live/selection" for Claude.
+async function pollSelection() {
+  const api = window.cadcraft;
+  if (liveBusy || document.hidden || !appReady) return;
+  liveBusy = true;
+  try {
+    if (!api || typeof api.request !== "function") {
+      if (liveKey !== "no-api" && db && cloudState === "ready") {
+        await db.doc("live/selection").set({ api: false, app: appVersion, updatedAt: new Date().toISOString() });
+        liveKey = "no-api";
+      }
+      return;
+    }
+    const info = await api.request("drawing.inspect", { entities: false });
+    const handles = Array.isArray(info.selection) ? info.selection : [];
+    const key = [info.title, info.space, handles.length, handles.join(",")].join("|");
+    if (key === liveKey) return;
+    let entities = [];
+    if (handles.length) {
+      const page = await api.execute("entities", { selected: true, limit: 2000 });
+      const wanted = new Set(handles);
+      entities = (page.entities || []).filter((entity) => wanted.has(entity.handle));
+    }
+    const byType = {}, byLayer = {};
+    let totalLength = 0;
+    const withGeometry = entities.length <= 200;
+    const items = entities.slice(0, 1000).map((entity) => {
+      const length = round3(entityLength(entity.geometry));
+      totalLength += length;
+      tally(byType, entity.type, length);
+      tally(byLayer, entity.layer, length);
+      const item = { h: entity.handle, t: entity.type, l: entity.layer, c: entity.color, len: length };
+      if (withGeometry) item.g = entity.geometry;
+      return item;
+    });
+    totalLength = round3(totalLength);
+    showSelection(handles.length, totalLength);
+    if (db && cloudState === "ready") {
+      await db.doc("live/selection").set({
+        api: true, app: appVersion, drawing: info.title || "", file: current ? current.name : "", space: info.space || "",
+        count: handles.length, totalLength, byType, byLayer, items, truncated: handles.length > items.length,
+        entityCount: info.entityCount || 0, layers: (info.layers || []).map((layer) => layer.name),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    liveKey = key;
+  } catch (error) {
+    console.warn("selection report failed:", error);
+  } finally {
+    liveBusy = false;
+  }
+}
+
+// Claude leaves rows in "commands" ({method, params, status: "pending", createdAt}); the program runs them and the reply goes back in the row.
+async function runCommand(row) {
+  const api = window.cadcraft;
+  if (row.status !== "pending" || runningCommands.has(row.id)) return;
+  if (!appReady || !api || typeof api.request !== "function") return;   // tried again when the program is ready
+  runningCommands.add(row.id);
+  const { id, ...rest } = row;
+  const path = "commands/" + id;
+  let outcome;
+  try {
+    const age = Date.now() - Date.parse(row.createdAt || "");
+    if (!(age < COMMAND_MAX_AGE_MS)) {
+      outcome = { status: "expired" };
+    } else {
+      await db.doc(path).set({ ...rest, status: "running", startedAt: new Date().toISOString() });
+      const result = await api.request(String(row.method), row.params || {});
+      const text = JSON.stringify(result === undefined ? null : result);
+      outcome = { status: "done", result: text.slice(0, 200000), truncated: text.length > 200000 };
+    }
+  } catch (error) {
+    outcome = { status: "error", error: String(error && error.message || error) };
+  }
+  try { await db.doc(path).set({ ...rest, ...outcome, finishedAt: new Date().toISOString() }); }
+  catch (error) { console.warn("command reply not stored:", error); }
+  runningCommands.delete(row.id);
+}
+
+function runPendingCommands() { commandRows.forEach(runCommand); }
+
+function watchCommands() {
+  db.collection("commands").onSnapshot((snapshot) => {
+    commandRows = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    runPendingCommands();
+  }, (error) => console.warn("command queue failed:", error));
+}
+
+setInterval(pollSelection, 1500);
+
+// ---------- PC files: drawings opened from the PC in this session (kept in memory only) ----------
+let pcFiles = [];
+function renderPcList() {
+  const list = document.getElementById("pc_list");
+  list.textContent = "";
+  if (!pcFiles.length) {
+    const note = document.createElement("div");
+    note.className = "file meta";
+    note.textContent = "Files opened from the PC show here until the page is reloaded. Use SAVE to keep one in the cloud.";
+    list.append(note);
+    return;
+  }
+  pcFiles.forEach((f) => {
+    const item = document.createElement("div");
+    item.className = "file";
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = f.name;
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = [formatDate(f.openedAt), formatSize(f.bytes.length), "not in the cloud"].join(" · ");
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    actions.append(button("Open", "primary", () => {
+      openInApp(f.name, f.bytes);
+      current = null;
+      renderList();
+      closePanel();
+      toast("Opened from PC: " + f.name);
+    }));
+    item.append(name, meta, actions);
+    list.append(item);
+  });
+}
+renderPcList();
+
+// ---------- Drawer and save form ----------
+function openPanel() { panel.hidden = false; }
+function closePanel() { panel.hidden = true; hideSaveForm(); canvas.focus(); }
+function hideSaveForm() { saveForm.hidden = true; pending = null; }
+
+document.getElementById("files_tab").addEventListener("click", () => { if (panel.hidden) openPanel(); else closePanel(); });
+document.getElementById("files_close").addEventListener("click", closePanel);
+document.getElementById("app_zip").addEventListener("click", (event) => downloadApp(event.currentTarget));
+document.getElementById("save_cancel").addEventListener("click", hideSaveForm);
+
+// Keep typing in the drawer away from the CAD program's shortcuts.
+["keydown", "keyup", "keypress", "paste", "copy", "cut"].forEach((type) => {
+  panel.addEventListener(type, (event) => event.stopPropagation());
+});
+panel.addEventListener("keydown", (event) => { if (event.key === "Escape") closePanel(); });
+
+saveForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pending) return;
+  const name = saveName.value.trim() || pending.name;
+  const obra = saveObra.value.trim();
+  const bytes = pending.bytes;
+  const submit = document.getElementById("save_cloud");
+  submit.disabled = true;
+  try {
+    await saveToCloud(name, obra, bytes);
+    hideSaveForm();
+  } catch (error) {
+    toast("Not saved to cloud: " + cloudError(error), true);
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+document.getElementById("save_export").addEventListener("click", async () => {
+  if (!pending) return;
+  const { bytes } = pending;
+  const name = saveName.value.trim() || pending.name;
+  hideSaveForm();
+  await exportToPc(name, bytes);
+});
+
+document.getElementById("pc_file").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const bytes = new Uint8Array(reader.result);
+    openInApp(file.name, bytes);
+    pcFiles = [{ name: file.name, bytes, openedAt: new Date().toISOString() }, ...pcFiles.filter((f) => f.name !== file.name)].slice(0, 10);
+    renderPcList();
+    current = null;
+    renderList();
+    closePanel();
+    toast("Opened from PC: " + file.name + ". Use SAVE to store it in the cloud.");
+  };
+  reader.onerror = () => toast("Could not read the file.", true);
+  reader.readAsArrayBuffer(file);
+});
+
+// Every SAVE / SAVEAS / export of the program arrives here. Nothing goes to the PC unless asked.
+canvas.addEventListener("cadcraft:save", async (event) => {
+  const detail = event.detail || {};
+  if (!detail.bytes) return;
+  const name = detail.name || "Drawing.dxf";
+  const bytes = new Uint8Array(detail.bytes).slice();
+  if (cloudState !== "ready") { exportToPc(name, bytes); return; }
+  if (current && current.name === name) {
+    // Same drawing that was opened from the cloud: save over it without asking.
+    try { await saveToCloud(name, current.obra || "", bytes); }
+    catch (error) { toast("Not saved to cloud: " + cloudError(error), true); }
+    return;
+  }
+  pending = { name, bytes };
+  saveName.value = name;
+  saveObra.value = lastObra;
+  saveForm.hidden = false;
+  openPanel();
+  saveObra.focus();
+});
+canvas.addEventListener("cadcraft:failed", (event) => fail(event.detail && event.detail.error));
+canvas.addEventListener("cadcraft:ready", () => {
+  appReady = true;
+  runPendingCommands();
+  openInitial();
+  // If the cloud is slow to answer, do not leave the program empty.
+  setTimeout(() => openInitial(true), 5000);
+});
+
+// Keep keyboard input on the app after any click.
+canvas.addEventListener("pointerdown", () => canvas.focus());
+
+renderList();
+initCloud();
+
+try {
+  const [{ default: init }, wasm] = await Promise.all([import(GLUE_URL), fetchWasm()]);
+  document.getElementById("loading_note").textContent = "Starting…";
+  await init({ module_or_path: wasm });
+  canvas.focus();
+} catch (error) {
+  fail(error);
+}
+</script>
+</body>
+</html>
+
+</body></html>

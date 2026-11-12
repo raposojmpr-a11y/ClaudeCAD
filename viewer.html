@@ -1,0 +1,862 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Visualizador DXF</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen drafting tool. Toolbar on top, model space fills the screen, layer list docked right (below on phones), status line at the bottom. */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --fg: #18202b;
+  --muted: #5b6878;
+  --line: #cfd6de;
+  --accent: #0f6c8c;
+  --accent-fg: #ffffff;
+  --hover: #e3e9ef;
+  --font-ui: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151a21; --panel: #1d242d; --fg: #e6ebf1; --muted: #93a1b2; --line: #333d4a;
+    --accent: #58bfe0; --accent-fg: #0c1a22; --hover: #28313c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151a21; --panel: #1d242d; --fg: #e6ebf1; --muted: #93a1b2; --line: #333d4a;
+  --accent: #58bfe0; --accent-fg: #0c1a22; --hover: #28313c; color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px;
+  display: flex; flex-direction: column; gap: 10px; box-sizing: border-box;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bar h1 { font-size: 16px; font-weight: 600; margin: 0 8px 0 0; letter-spacing: 0.01em; }
+.file { font-family: var(--font-data); font-size: 12px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; flex: 1 1 160px; }
+.btn {
+  font: inherit; font-weight: 500; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer;
+  display: inline-flex; align-items: center; min-height: 32px; box-sizing: border-box;
+}
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); background: var(--accent); }
+.btn:focus-visible, .open:focus-within, .layers input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.open input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.open { position: relative; }
+.work { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 10px; }
+.stage { position: relative; min-height: 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+canvas.drag { cursor: grabbing; }
+.zoom { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.zoom .btn { width: 34px; padding: 0; justify-content: center; font-family: var(--font-data); font-size: 16px; }
+.msg {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 24px; background: var(--panel); color: var(--fg); line-height: 1.5;
+}
+.msg p { max-width: 46ch; margin: 0; }
+.drop { position: absolute; inset: 8px; border: 2px dashed var(--accent); border-radius: 4px; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--panel) 80%, transparent); }
+.layers { min-height: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
+.layers header { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.layers h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0; flex: 1; }
+.layers header .btn { min-height: 26px; padding: 2px 8px; font-size: 12px; }
+.layers ul { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; min-height: 0; flex: 1; }
+.layers label { display: grid; grid-template-columns: auto 14px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 10px; cursor: pointer; }
+.layers label:hover { background: var(--hover); }
+.sw { width: 14px; height: 14px; border-radius: 2px; border: 1px solid var(--line); box-sizing: border-box; }
+.lname { overflow-wrap: anywhere; }
+.lcount { font-family: var(--font-data); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.status { display: flex; flex-wrap: wrap; gap: 4px 18px; font-family: var(--font-data); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.status b { font-weight: 500; color: var(--fg); }
+@media (max-width: 720px) {
+  .work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .layers { max-height: 30vh; }
+}
+</style>
+
+<div class="bar">
+  <h1>Visualizador DXF</h1>
+  <label class="btn primary open">Abrir DXF<input type="file" id="file-input" accept=".dxf"></label>
+  <button class="btn" id="btn-fit" type="button">Enquadrar tudo</button>
+  <button class="btn" id="btn-bg" type="button">Fundo claro</button>
+  <span class="file" id="file-name"></span>
+</div>
+
+<div class="work">
+  <div class="stage" id="stage">
+    <canvas id="cv" tabindex="0" aria-label="Desenho DXF. Arrasta para mover e usa a roda do rato para fazer zoom."></canvas>
+    <div class="zoom">
+      <button class="btn" id="btn-in" type="button" aria-label="Aproximar">+</button>
+      <button class="btn" id="btn-out" type="button" aria-label="Afastar">&minus;</button>
+    </div>
+    <div class="msg" id="msg" hidden><p id="msg-text"></p></div>
+    <div class="drop" id="drop" hidden>Larga o DXF aqui</div>
+  </div>
+  <aside class="layers">
+    <header>
+      <h2>Layers</h2>
+      <button class="btn" id="btn-all" type="button">Todos</button>
+      <button class="btn" id="btn-none" type="button">Nenhum</button>
+    </header>
+    <ul id="layer-list"></ul>
+  </aside>
+</div>
+
+<div class="status">
+  <span>X <b id="st-x">–</b></span>
+  <span>Y <b id="st-y">–</b></span>
+  <span>Unidades <b id="st-units">–</b></span>
+  <span>Formato <b id="st-ver">–</b></span>
+  <span>Entidades <b id="st-count">–</b></span>
+</div>
+
+<script type="text/plain" id="sample-dxf">
+0
+SECTION
+2
+HEADER
+9
+$ACADVER
+1
+AC1009
+0
+ENDSEC
+0
+SECTION
+2
+ENTITIES
+0
+LINE
+8
+0
+10
+0
+20
+40
+30
+0
+11
+24
+21
+40
+31
+0
+0
+LINE
+8
+0
+10
+18
+20
+40
+30
+0
+11
+18
+21
+8
+31
+0
+0
+LINE
+8
+0
+10
+18
+20
+8
+30
+0
+11
+14
+21
+2
+31
+0
+0
+LINE
+8
+0
+10
+14
+20
+2
+30
+0
+11
+5
+21
+2
+31
+0
+0
+LINE
+8
+0
+10
+5
+20
+2
+30
+0
+11
+0
+21
+8
+31
+0
+0
+LINE
+8
+0
+10
+35
+20
+0
+30
+0
+11
+35
+21
+40
+31
+0
+0
+LINE
+8
+0
+10
+35
+20
+40
+30
+0
+11
+53
+21
+40
+31
+0
+0
+LINE
+8
+0
+10
+53
+20
+40
+30
+0
+11
+60
+21
+34
+31
+0
+0
+LINE
+8
+0
+10
+60
+20
+34
+30
+0
+11
+60
+21
+26
+31
+0
+0
+LINE
+8
+0
+10
+60
+20
+26
+30
+0
+11
+53
+21
+20
+31
+0
+0
+LINE
+8
+0
+10
+53
+20
+20
+30
+0
+11
+35
+21
+20
+31
+0
+0
+LINE
+8
+0
+10
+47
+20
+20
+30
+0
+11
+62
+21
+0
+31
+0
+0
+ENDSEC
+0
+EOF
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- DXF parsing ----------
+  function toPairs(text) {
+    var L = text.split(/\r\n|\r|\n/), pairs = [];
+    for (var i = 0; i + 1 < L.length; i += 2) {
+      var code = parseInt(L[i], 10);
+      if (isNaN(code)) { i -= 1; continue; } // skip a stray line and resync
+      pairs.push([code, L[i + 1].trim()]);
+    }
+    return pairs;
+  }
+
+  // Value type of a group code in binary DXF: s string, d double, h int16, i int32, q int64, b bool, x binary chunk
+  function binType(c) {
+    if (c < 10) return "s";
+    if (c < 60) return "d";
+    if (c < 80) return "h";
+    if (c >= 90 && c < 100) return "i";
+    if (c >= 100 && c < 110) return "s";
+    if (c >= 110 && c < 150) return "d";
+    if (c >= 160 && c < 170) return "q";
+    if (c >= 170 && c < 180) return "h";
+    if (c >= 210 && c < 240) return "d";
+    if (c >= 270 && c < 290) return "h";
+    if (c >= 290 && c < 300) return "b";
+    if (c >= 300 && c < 310) return "s";
+    if (c >= 310 && c < 320) return "x";
+    if (c >= 320 && c < 370) return "s";
+    if (c >= 370 && c < 390) return "h";
+    if (c >= 390 && c < 400) return "s";
+    if (c >= 400 && c < 410) return "h";
+    if (c >= 410 && c < 420) return "s";
+    if (c >= 420 && c < 430) return "i";
+    if (c >= 430 && c < 440) return "s";
+    if (c >= 440 && c < 460) return "i";
+    if (c >= 460 && c < 470) return "d";
+    if (c >= 470 && c < 482) return "s";
+    if (c === 999) return "s";
+    if (c === 1004) return "x";
+    if (c >= 1000 && c < 1010) return "s";
+    if (c >= 1010 && c < 1060) return "d";
+    if (c >= 1060 && c < 1071) return "h";
+    if (c === 1071) return "i";
+    return null;
+  }
+  var BIN_SENTINEL = "AutoCAD Binary DXF";
+  function binaryToPairs(buf) {
+    var u8 = new Uint8Array(buf), dv = new DataView(buf), pos = 22, raw = [];
+    var wide = u8[23] === 0; // R13 and later store 2-byte group codes; R12 and earlier 1-byte codes
+    while (pos < u8.length) {
+      var code;
+      if (wide) { code = dv.getUint16(pos, true); pos += 2; }
+      else { code = u8[pos++]; if (code === 255) { code = dv.getUint16(pos, true); pos += 2; } }
+      var t = binType(code), val;
+      if (t === "s") { var end = pos; while (end < u8.length && u8[end] !== 0) end++; val = u8.subarray(pos, end); pos = end + 1; }
+      else if (t === "d") { val = String(dv.getFloat64(pos, true)); pos += 8; }
+      else if (t === "h") { val = String(dv.getInt16(pos, true)); pos += 2; }
+      else if (t === "i") { val = String(dv.getInt32(pos, true)); pos += 4; }
+      else if (t === "q") { val = String(dv.getInt32(pos, true)); pos += 8; }
+      else if (t === "b") { val = String(u8[pos]); pos += 1; }
+      else if (t === "x") { val = ""; pos += 1 + u8[pos]; }
+      else throw new Error("unknown group code " + code);
+      raw.push([code, val]);
+      if (code === 0 && typeof val !== "string" && val.length === 3 && val[0] === 69 && val[1] === 79 && val[2] === 70) break; // EOF
+    }
+    // text encoding depends on the file version, which is itself stored as text
+    var ascii = new TextDecoder("latin1"), version = "";
+    for (var i = 0; i + 1 < raw.length && i < 4000; i++) {
+      if (raw[i][0] === 9 && ascii.decode(raw[i][1]) === "$ACADVER") { version = ascii.decode(raw[i + 1][1]); break; }
+    }
+    var m = /^AC(\d{4})/.exec(version), dec = new TextDecoder(m && parseInt(m[1], 10) >= 1021 ? "utf-8" : "windows-1252");
+    for (i = 0; i < raw.length; i++) if (typeof raw[i][1] !== "string") raw[i][1] = dec.decode(raw[i][1]).trim();
+    return raw;
+  }
+
+  function readEntities(pairs, start, end) {
+    var list = [], cur = null;
+    for (var i = start; i < end; i++) {
+      var p = pairs[i];
+      if (p[0] === 0) { cur = { type: p[1], d: [] }; list.push(cur); }
+      else if (cur) cur.d.push(p);
+    }
+    // attach VERTEX records to their POLYLINE
+    var out = [], poly = null;
+    list.forEach(function (e) {
+      if (e.type === "POLYLINE") { poly = e; e.verts = []; out.push(e); }
+      else if (e.type === "VERTEX" && poly) poly.verts.push(e);
+      else if (e.type === "SEQEND") poly = null;
+      else out.push(e);
+    });
+    return out;
+  }
+
+  function g(e, code, def) {
+    for (var i = 0; i < e.d.length; i++) if (e.d[i][0] === code) return e.d[i][1];
+    return def;
+  }
+  function gf(e, code, def) { var v = g(e, code); return v === undefined ? def : parseFloat(v); }
+
+  function parseDxf(pairs) {
+    var sections = {}, i = 0;
+    while (i < pairs.length) {
+      if (pairs[i][0] === 0 && pairs[i][1] === "SECTION" && pairs[i + 1]) {
+        var name = pairs[i + 1][1], s = i + 2, j = s;
+        while (j < pairs.length && !(pairs[j][0] === 0 && pairs[j][1] === "ENDSEC")) j++;
+        sections[name] = [s, j];
+        i = j + 1;
+      } else i++;
+    }
+    if (!sections.ENTITIES) throw new Error("no ENTITIES section");
+    var doc = { version: "", units: -1, layers: {}, blocks: {}, entities: [] };
+
+    if (sections.HEADER) {
+      for (i = sections.HEADER[0]; i < sections.HEADER[1] - 1; i++) {
+        if (pairs[i][0] !== 9) continue;
+        if (pairs[i][1] === "$ACADVER") doc.version = pairs[i + 1][1];
+        if (pairs[i][1] === "$INSUNITS") doc.units = parseInt(pairs[i + 1][1], 10);
+      }
+    }
+    if (sections.TABLES) {
+      readEntities(pairs, sections.TABLES[0], sections.TABLES[1]).forEach(function (r) {
+        if (r.type !== "LAYER") return;
+        var nm = g(r, 2);
+        if (nm === undefined) return;
+        var col = parseInt(g(r, 62, "7"), 10);
+        doc.layers[nm] = {
+          aci: Math.abs(col), tc: g(r, 420) !== undefined ? parseInt(g(r, 420), 10) : -1,
+          off: col < 0 || (parseInt(g(r, 70, "0"), 10) & 1) === 1,
+          dash: /DASH|HIDDEN|DOT|CENTER/i.test(g(r, 6, ""))
+        };
+      });
+    }
+    if (sections.BLOCKS) {
+      var blk = null;
+      readEntities(pairs, sections.BLOCKS[0], sections.BLOCKS[1]).forEach(function (e) {
+        if (e.type === "BLOCK") { blk = { bx: gf(e, 10, 0), by: gf(e, 20, 0), ents: [] }; doc.blocks[g(e, 2, "")] = blk; }
+        else if (e.type === "ENDBLK") blk = null;
+        else if (blk) blk.ents.push(e);
+      });
+    }
+    doc.entities = readEntities(pairs, sections.ENTITIES[0], sections.ENTITIES[1]);
+    return doc;
+  }
+
+  // ---------- AutoCAD Color Index ----------
+  var ACI_BASE = [0, 0xFF0000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF, -1, 0x414141, 0x808080];
+  var ACI_GREY = [0x333333, 0x505050, 0x696969, 0x828282, 0xBEBEBE, -1];
+  var SHADE_V = [1, 1, 0.65, 0.65, 0.5, 0.5, 0.3, 0.3, 0.15, 0.15];
+  function aciToRgb(n) {
+    if (n < 10) return ACI_BASE[n] === undefined ? -1 : ACI_BASE[n];
+    if (n >= 250) return ACI_GREY[n - 250];
+    var h = Math.floor((n - 10) / 10) * 15 / 60, k = n % 10, v = SHADE_V[k], s = k % 2 ? 0.5 : 1;
+    var c = v * s, x = c * (1 - Math.abs(h % 2 - 1)), m = v - c, r = 0, gg = 0, b = 0;
+    if (h < 1) { r = c; gg = x; } else if (h < 2) { r = x; gg = c; } else if (h < 3) { gg = c; b = x; }
+    else if (h < 4) { gg = x; b = c; } else if (h < 5) { r = x; b = c; } else { r = c; b = x; }
+    return (Math.round((r + m) * 255) << 16) | (Math.round((gg + m) * 255) << 8) | Math.round((b + m) * 255);
+  }
+
+  // ---------- Flatten entities into drawable primitives ----------
+  var IDENT = [1, 0, 0, 1, 0, 0];
+  function mul(M, N) { // apply N first, then M
+    return [M[0] * N[0] + M[2] * N[1], M[1] * N[0] + M[3] * N[1], M[0] * N[2] + M[2] * N[3], M[1] * N[2] + M[3] * N[3],
+            M[0] * N[4] + M[2] * N[5] + M[4], M[1] * N[4] + M[3] * N[5] + M[5]];
+  }
+  function arcPts(cx, cy, rx, ry, a0, sweep, rot) {
+    var n = Math.max(2, Math.ceil(Math.abs(sweep) / (2 * Math.PI) * 72)), pts = [], cr = Math.cos(rot || 0), sr = Math.sin(rot || 0);
+    for (var i = 0; i <= n; i++) {
+      var a = a0 + sweep * i / n, x = rx * Math.cos(a), y = ry * Math.sin(a);
+      pts.push(cx + x * cr - y * sr, cy + x * sr + y * cr);
+    }
+    return pts;
+  }
+  function bulgePts(x1, y1, x2, y2, b) {
+    var k = (1 - b * b) / (4 * b), cx = (x1 + x2) / 2 - (y2 - y1) * k, cy = (y1 + y2) / 2 + (x2 - x1) * k;
+    var pts = arcPts(cx, cy, Math.hypot(x1 - cx, y1 - cy), Math.hypot(x1 - cx, y1 - cy), Math.atan2(y1 - cy, x1 - cx), 4 * Math.atan(b));
+    return pts.slice(2); // first point is already in the path
+  }
+  function cleanText(s) {
+    return s.replace(/\\U\+([0-9A-Fa-f]{4})/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); })
+      .replace(/\\P/g, "\n").replace(/\\[fFHCQTWApS][^;]*;/g, "").replace(/\\[LlOoKk]/g, "").replace(/\\~/g, " ")
+      .replace(/\\([\\{}])/g, "$1").replace(/[{}]/g, "")
+      .replace(/%%[dD]/g, "°").replace(/%%[cC]/g, "Ø").replace(/%%[pP]/g, "±").replace(/%%[uUoO]/g, "");
+  }
+
+  function flatten(doc) {
+    var prims = [];
+    function polyVerts(e) {
+      var v = [];
+      e.d.forEach(function (p) {
+        if (p[0] === 10) v.push({ x: parseFloat(p[1]), y: 0, b: 0 });
+        else if (p[0] === 20 && v.length) v[v.length - 1].y = parseFloat(p[1]);
+        else if (p[0] === 42 && v.length) v[v.length - 1].b = parseFloat(p[1]);
+      });
+      return v;
+    }
+    function pathFromVerts(v, closed) {
+      var pts = [];
+      for (var i = 0; i < v.length; i++) {
+        pts.push(v[i].x, v[i].y);
+        var nx = i + 1 < v.length ? v[i + 1] : (closed ? v[0] : null);
+        if (nx && v[i].b) Array.prototype.push.apply(pts, bulgePts(v[i].x, v[i].y, nx.x, nx.y, v[i].b));
+        else if (!nx) break;
+        else if (i + 1 === v.length) pts.push(nx.x, nx.y);
+      }
+      return pts;
+    }
+    function emit(e, M, ctxLayer, ctxRgb, depth) {
+      if (g(e, 67) === "1") return; // paper space
+      var layer = g(e, 8, "0");
+      if (layer === "0" && ctxLayer) layer = ctxLayer;
+      var lay = doc.layers[layer] || { aci: 7, tc: -1, dash: false };
+      var c62 = g(e, 62), c420 = g(e, 420), rgb;
+      if (c420 !== undefined) rgb = parseInt(c420, 10);
+      else if (c62 === "0" && ctxRgb !== undefined) rgb = ctxRgb;
+      else if (c62 === undefined || c62 === "256" || c62 === "0") rgb = lay.tc >= 0 ? lay.tc : aciToRgb(lay.aci);
+      else rgb = aciToRgb(Math.abs(parseInt(c62, 10)));
+      if (rgb === 0xFFFFFF || rgb === 0) rgb = -1; // pure white/black follow the background
+
+      function line(pts) {
+        if (pts.length < 4) return;
+        var a = new Float64Array(pts.length), x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (var i = 0; i < pts.length; i += 2) {
+          var x = M[0] * pts[i] + M[2] * pts[i + 1] + M[4], y = M[1] * pts[i] + M[3] * pts[i + 1] + M[5];
+          a[i] = x; a[i + 1] = y;
+          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+        if (!isFinite(x0 + y0 + x1 + y1)) return;
+        prims.push({ k: 0, pts: a, layer: layer, rgb: rgb, dash: lay.dash, box: [x0, y0, x1, y1] });
+      }
+      function text(x, y, h, rot, str, align, base) {
+        str = cleanText(str);
+        if (!str.trim() || !(h > 0)) return;
+        var tx = M[0] * x + M[2] * y + M[4], ty = M[1] * x + M[3] * y + M[5];
+        prims.push({ k: 1, x: tx, y: ty, h: h * Math.hypot(M[2], M[3]), rot: rot + Math.atan2(M[1], M[0]),
+          lines: str.split("\n"), align: align, base: base, layer: layer, rgb: rgb, box: [tx, ty, tx, ty] });
+      }
+
+      var t = e.type, v, i, DEG = Math.PI / 180;
+      if (t === "LINE") line([gf(e, 10, 0), gf(e, 20, 0), gf(e, 11, 0), gf(e, 21, 0)]);
+      else if (t === "LWPOLYLINE") {
+        v = polyVerts(e);
+        var closed = (parseInt(g(e, 70, "0"), 10) & 1) === 1;
+        var pts = pathFromVerts(v, closed);
+        if (closed && v.length) pts.push(v[0].x, v[0].y);
+        line(pts);
+      } else if (t === "POLYLINE") {
+        v = (e.verts || []).map(function (q) { return { x: gf(q, 10, 0), y: gf(q, 20, 0), b: gf(q, 42, 0) }; });
+        var cl = (parseInt(g(e, 70, "0"), 10) & 1) === 1, pp = pathFromVerts(v, cl);
+        if (cl && v.length) pp.push(v[0].x, v[0].y);
+        line(pp);
+      } else if (t === "CIRCLE") line(arcPts(gf(e, 10, 0), gf(e, 20, 0), gf(e, 40, 0), gf(e, 40, 0), 0, 2 * Math.PI));
+      else if (t === "ARC") {
+        var a0 = gf(e, 50, 0) * DEG, a1 = gf(e, 51, 360) * DEG, sw = a1 - a0;
+        while (sw <= 0) sw += 2 * Math.PI;
+        line(arcPts(gf(e, 10, 0), gf(e, 20, 0), gf(e, 40, 0), gf(e, 40, 0), a0, sw));
+      } else if (t === "ELLIPSE") {
+        var mx = gf(e, 11, 1), my = gf(e, 21, 0), rx = Math.hypot(mx, my), p0 = gf(e, 41, 0), p1 = gf(e, 42, 2 * Math.PI), sp = p1 - p0;
+        while (sp <= 0) sp += 2 * Math.PI;
+        line(arcPts(gf(e, 10, 0), gf(e, 20, 0), rx, rx * gf(e, 40, 1), p0, sp, Math.atan2(my, mx)));
+      } else if (t === "SPLINE" || t === "LEADER") {
+        v = polyVerts(e);
+        var fit = [], fx = null;
+        e.d.forEach(function (p) { if (p[0] === 11) fx = parseFloat(p[1]); else if (p[0] === 21 && fx !== null) { fit.push(fx, parseFloat(p[1])); fx = null; } });
+        if (t === "SPLINE" && fit.length >= 4) line(fit);
+        else { var sp2 = []; v.forEach(function (q) { sp2.push(q.x, q.y); }); line(sp2); }
+      } else if (t === "TEXT" || t === "ATTRIB") {
+        var ha = parseInt(g(e, 72, "0"), 10), va = parseInt(g(e, 73, g(e, 74, "0")), 10), second = (ha || va) && g(e, 11) !== undefined;
+        text(second ? gf(e, 11, 0) : gf(e, 10, 0), second ? gf(e, 21, 0) : gf(e, 20, 0), gf(e, 40, 1), gf(e, 50, 0) * DEG, g(e, 1, ""),
+          ha === 1 || ha === 4 ? "center" : ha === 2 ? "right" : "left", va === 3 ? "top" : va === 2 || ha === 4 ? "middle" : "alphabetic");
+      } else if (t === "MTEXT") {
+        var str = "";
+        e.d.forEach(function (p) { if (p[0] === 3 || p[0] === 1) str += p[1]; });
+        var at = parseInt(g(e, 71, "1"), 10), col = (at - 1) % 3, row = Math.floor((at - 1) / 3);
+        var rot = g(e, 11) !== undefined ? Math.atan2(gf(e, 21, 0), gf(e, 11, 1)) : gf(e, 50, 0) * DEG;
+        text(gf(e, 10, 0), gf(e, 20, 0), gf(e, 40, 1), rot, str, ["left", "center", "right"][col], ["top", "middle", "alphabetic"][row]);
+      } else if ((t === "INSERT" || t === "DIMENSION") && depth < 8) {
+        var b = doc.blocks[g(e, 2, "")];
+        if (!b) return;
+        var N = IDENT;
+        if (t === "INSERT") {
+          var r = gf(e, 50, 0) * DEG, sx = gf(e, 41, 1), sy = gf(e, 42, 1), cr = Math.cos(r), sr = Math.sin(r);
+          N = mul([cr * sx, sr * sx, -sr * sy, cr * sy, gf(e, 10, 0), gf(e, 20, 0)], [1, 0, 0, 1, -b.bx, -b.by]);
+        }
+        var M2 = mul(M, N);
+        for (i = 0; i < b.ents.length; i++) emit(b.ents[i], M2, layer, rgb, depth + 1);
+      }
+    }
+    doc.entities.forEach(function (e) { emit(e, IDENT, null, undefined, 0); });
+    return prims;
+  }
+
+  // ---------- Viewer state ----------
+  var cv = document.getElementById("cv"), ctx = cv.getContext("2d"), stage = document.getElementById("stage");
+  var prims = [], layerOn = {}, layerInfo = [], view = { s: 1, ox: 0, oy: 0 }, darkBg = true, cssW = 1, cssH = 1, queued = false;
+  try { darkBg = localStorage.getItem("dxf-bg") !== "light"; } catch (err) { /* storage unavailable */ }
+
+  var BG = { dark: "#212830", light: "#ffffff" }, FG = { dark: "#f1f4f8", light: "#151a21" }, cssCache = {};
+  function colorCss(rgb) {
+    if (rgb < 0) return darkBg ? FG.dark : FG.light;
+    var key = (darkBg ? "d" : "l") + rgb;
+    if (cssCache[key]) return cssCache[key];
+    var r = rgb >> 16 & 255, gg = rgb >> 8 & 255, b = rgb & 255, lum = (0.299 * r + 0.587 * gg + 0.114 * b) / 255;
+    if (!darkBg && lum > 0.62) { var f = 0.62 / lum * 0.9; r *= f; gg *= f; b *= f; }          // keep pale colors readable on white
+    else if (darkBg && lum < 0.28) { var a = 0.45; r += (255 - r) * a; gg += (255 - gg) * a; b += (255 - b) * a; } // lift dark colors
+    return (cssCache[key] = "rgb(" + Math.round(r) + "," + Math.round(gg) + "," + Math.round(b) + ")");
+  }
+
+  function schedule() { if (!queued) { queued = true; requestAnimationFrame(draw); } }
+
+  function draw() {
+    queued = false;
+    var dpr = window.devicePixelRatio || 1, s = view.s;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = darkBg ? BG.dark : BG.light;
+    ctx.fillRect(0, 0, cssW, cssH);
+    var wx0 = -view.ox / s, wx1 = (cssW - view.ox) / s, wy1 = view.oy / s, wy0 = (view.oy - cssH) / s;
+    ctx.lineWidth = 1; ctx.lineJoin = "round";
+    var curStyle = null, curDash = null, open = false;
+    function flush() { if (open) { ctx.stroke(); open = false; } }
+    for (var i = 0; i < prims.length; i++) {
+      var p = prims[i];
+      if (!layerOn[p.layer]) continue;
+      var b = p.box;
+      if (b[2] < wx0 || b[0] > wx1 || b[3] < wy0 || b[1] > wy1) continue;
+      var style = colorCss(p.rgb);
+      if (p.k === 0) {
+        if (style !== curStyle || p.dash !== curDash) {
+          flush();
+          ctx.strokeStyle = style; ctx.setLineDash(p.dash ? [6, 4] : []);
+          curStyle = style; curDash = p.dash;
+        }
+        if (!open) { ctx.beginPath(); open = true; }
+        var a = p.pts;
+        ctx.moveTo(a[0] * s + view.ox, view.oy - a[1] * s);
+        for (var j = 2; j < a.length; j += 2) ctx.lineTo(a[j] * s + view.ox, view.oy - a[j + 1] * s);
+      } else {
+        var px = p.h * s * 1.3;
+        if (px < 3) continue;
+        flush(); curStyle = null;
+        ctx.save();
+        ctx.translate(p.x * s + view.ox, view.oy - p.y * s);
+        ctx.rotate(-p.rot);
+        ctx.font = px + "px \"IBM Plex Sans\", Arial, sans-serif";
+        ctx.fillStyle = style; ctx.textAlign = p.align; ctx.textBaseline = p.base;
+        var lh = px * 1.3, n = p.lines.length, y0 = p.base === "top" ? 0 : p.base === "middle" ? -(n - 1) * lh / 2 : -(n - 1) * lh;
+        for (var k = 0; k < n; k++) ctx.fillText(p.lines[k], 0, y0 + k * lh);
+        ctx.restore();
+      }
+    }
+    flush();
+  }
+
+  function fit() {
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    prims.forEach(function (p) {
+      if (!layerOn[p.layer]) return;
+      var b = p.box;
+      if (b[0] < x0) x0 = b[0]; if (b[1] < y0) y0 = b[1]; if (b[2] > x1) x1 = b[2]; if (b[3] > y1) y1 = b[3];
+    });
+    if (!isFinite(x0)) { schedule(); return; }
+    var w = Math.max(x1 - x0, 1e-9), h = Math.max(y1 - y0, 1e-9);
+    view.s = Math.min(cssW / w, cssH / h) * 0.92;
+    view.ox = cssW / 2 - (x0 + x1) / 2 * view.s;
+    view.oy = cssH / 2 + (y0 + y1) / 2 * view.s;
+    schedule();
+  }
+
+  function zoomAt(px, py, factor) {
+    var ns = Math.min(Math.max(view.s * factor, 1e-9), 1e9), k = ns / view.s;
+    view.ox = px - (px - view.ox) * k; view.oy = py - (py - view.oy) * k; view.s = ns;
+    schedule();
+  }
+
+  function resize() {
+    var r = stage.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    var first = cssW <= 1;
+    cssW = Math.max(1, r.width); cssH = Math.max(1, r.height);
+    cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+    if (first) fit(); else schedule();
+  }
+
+  // ---------- Layer panel ----------
+  var listEl = document.getElementById("layer-list");
+  function buildLayers(doc) {
+    var counts = {};
+    prims.forEach(function (p) { counts[p.layer] = (counts[p.layer] || 0) + 1; });
+    layerOn = {}; layerInfo = [];
+    Object.keys(counts).sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); }).forEach(function (name) {
+      var lay = doc.layers[name] || { aci: 7, tc: -1, off: false };
+      var rgb = lay.tc >= 0 ? lay.tc : aciToRgb(lay.aci);
+      if (rgb === 0xFFFFFF || rgb === 0) rgb = -1;
+      layerOn[name] = !lay.off;
+      layerInfo.push({ name: name, rgb: rgb, count: counts[name] });
+    });
+    renderLayers();
+  }
+  function renderLayers() {
+    listEl.textContent = "";
+    layerInfo.forEach(function (li, idx) {
+      var item = document.createElement("li"), label = document.createElement("label"), cb = document.createElement("input");
+      cb.type = "checkbox"; cb.id = "layer-" + idx; cb.checked = layerOn[li.name];
+      cb.addEventListener("change", function () { layerOn[li.name] = cb.checked; schedule(); });
+      var sw = document.createElement("span"); sw.className = "sw"; sw.style.background = colorCss(li.rgb);
+      var nm = document.createElement("span"); nm.className = "lname"; nm.textContent = li.name;
+      var ct = document.createElement("span"); ct.className = "lcount"; ct.textContent = li.count;
+      label.append(cb, sw, nm, ct); item.append(label); listEl.append(item);
+    });
+  }
+  function setAll(on) { layerInfo.forEach(function (li) { layerOn[li.name] = on; }); renderLayers(); schedule(); }
+
+  // ---------- Loading ----------
+  var VERSIONS = { AC1006: "R10", AC1009: "R11/R12", AC1012: "R13", AC1014: "R14", AC1015: "2000", AC1018: "2004", AC1021: "2007", AC1024: "2010", AC1027: "2013", AC1032: "2018" };
+  var UNITS = { 0: "sem unidade", 1: "polegadas", 2: "pés", 4: "mm", 5: "cm", 6: "m" };
+  var msg = document.getElementById("msg"), msgText = document.getElementById("msg-text");
+  function showError(t) { msgText.textContent = t; msg.hidden = false; }
+
+  function load(pairs, label, binary) {
+    var doc, list;
+    try { doc = parseDxf(pairs); list = flatten(doc); }
+    catch (err) { showError("Não consegui ler este ficheiro. Confirma que é um DXF. Os DWG não abrem aqui: no AutoCAD usa SAVEAS e escolhe um dos formatos DXF."); return; }
+    if (!list.length) { showError("O ficheiro abriu, mas não tem linhas, arcos nem texto que eu saiba desenhar."); return; }
+    msg.hidden = true;
+    prims = list;
+    buildLayers(doc);
+    document.getElementById("file-name").textContent = label;
+    var ver = doc.version ? (VERSIONS[doc.version] ? "AutoCAD " + VERSIONS[doc.version] : doc.version) : "DXF";
+    document.getElementById("st-ver").textContent = ver + (binary ? " binário" : " ASCII");
+    document.getElementById("st-units").textContent = UNITS[doc.units] || "–";
+    document.getElementById("st-count").textContent = prims.length;
+    fit();
+  }
+
+  function isBinary(buf) {
+    return new TextDecoder("latin1").decode(buf.slice(0, BIN_SENTINEL.length)) === BIN_SENTINEL;
+  }
+  function decode(buf) {
+    if (isBinary(buf)) return binaryToPairs(buf);
+    var head = new TextDecoder("latin1").decode(buf.slice(0, 4096));
+    var m = /\$ACADVER\s+1\s+AC(\d{4})/.exec(head), utf8 = !m || parseInt(m[1], 10) >= 1021;
+    return toPairs(new TextDecoder(utf8 ? "utf-8" : "windows-1252").decode(buf));
+  }
+  function openFile(file) {
+    if (!file) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var pairs;
+      try { pairs = decode(fr.result); }
+      catch (err) { showError("Não consegui ler este DXF binário. Tenta gravá-lo outra vez no AutoCAD (SAVEAS) ou exporta-o em ASCII."); return; }
+      load(pairs, file.name, isBinary(fr.result));
+    };
+    fr.onerror = function () { showError("Não consegui abrir o ficheiro. Tenta escolhê-lo outra vez."); };
+    fr.readAsArrayBuffer(file);
+  }
+
+  // ---------- Interaction ----------
+  var pointers = new Map(), lastDist = 0;
+  function local(ev) { var r = cv.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+  cv.addEventListener("pointerdown", function (ev) {
+    cv.setPointerCapture(ev.pointerId); pointers.set(ev.pointerId, local(ev)); cv.classList.add("drag"); lastDist = 0;
+  });
+  cv.addEventListener("pointermove", function (ev) {
+    var p = local(ev);
+    document.getElementById("st-x").textContent = ((p.x - view.ox) / view.s).toFixed(3);
+    document.getElementById("st-y").textContent = ((view.oy - p.y) / view.s).toFixed(3);
+    var prev = pointers.get(ev.pointerId);
+    if (!prev) return;
+    pointers.set(ev.pointerId, p);
+    if (pointers.size === 1) { view.ox += p.x - prev.x; view.oy += p.y - prev.y; schedule(); }
+    else if (pointers.size === 2) {
+      var it = Array.from(pointers.values()), d = Math.hypot(it[0].x - it[1].x, it[0].y - it[1].y);
+      if (lastDist > 0 && d > 0) zoomAt((it[0].x + it[1].x) / 2, (it[0].y + it[1].y) / 2, d / lastDist);
+      lastDist = d;
+    }
+  });
+  function release(ev) { pointers.delete(ev.pointerId); lastDist = 0; if (!pointers.size) cv.classList.remove("drag"); }
+  cv.addEventListener("pointerup", release);
+  cv.addEventListener("pointercancel", release);
+  cv.addEventListener("wheel", function (ev) {
+    ev.preventDefault();
+    var p = local(ev);
+    zoomAt(p.x, p.y, Math.exp(-ev.deltaY * (ev.deltaMode === 1 ? 0.05 : 0.0016)));
+  }, { passive: false });
+  cv.addEventListener("dblclick", fit);
+  cv.addEventListener("keydown", function (ev) {
+    var step = 60;
+    if (ev.key === "+" || ev.key === "=") zoomAt(cssW / 2, cssH / 2, 1.3);
+    else if (ev.key === "-") zoomAt(cssW / 2, cssH / 2, 1 / 1.3);
+    else if (ev.key === "ArrowLeft") { view.ox += step; schedule(); }
+    else if (ev.key === "ArrowRight") { view.ox -= step; schedule(); }
+    else if (ev.key === "ArrowUp") { view.oy += step; schedule(); }
+    else if (ev.key === "ArrowDown") { view.oy -= step; schedule(); }
+    else if (ev.key === "Home" || ev.key === "f") fit();
+    else return;
+    ev.preventDefault();
+  });
+
+  document.getElementById("btn-in").addEventListener("click", function () { zoomAt(cssW / 2, cssH / 2, 1.4); });
+  document.getElementById("btn-out").addEventListener("click", function () { zoomAt(cssW / 2, cssH / 2, 1 / 1.4); });
+  document.getElementById("btn-fit").addEventListener("click", fit);
+  document.getElementById("btn-all").addEventListener("click", function () { setAll(true); });
+  document.getElementById("btn-none").addEventListener("click", function () { setAll(false); });
+  var btnBg = document.getElementById("btn-bg");
+  function syncBg() { btnBg.textContent = darkBg ? "Fundo claro" : "Fundo escuro"; }
+  btnBg.addEventListener("click", function () {
+    darkBg = !darkBg;
+    try { localStorage.setItem("dxf-bg", darkBg ? "dark" : "light"); } catch (err) { /* storage unavailable */ }
+    syncBg(); renderLayers(); schedule();
+  });
+  document.getElementById("file-input").addEventListener("change", function (ev) { openFile(ev.target.files[0]); ev.target.value = ""; });
+
+  var drop = document.getElementById("drop"), dragDepth = 0;
+  stage.addEventListener("dragenter", function (ev) { ev.preventDefault(); dragDepth++; drop.hidden = false; });
+  stage.addEventListener("dragover", function (ev) { ev.preventDefault(); });
+  stage.addEventListener("dragleave", function () { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) drop.hidden = true; });
+  stage.addEventListener("drop", function (ev) {
+    ev.preventDefault(); dragDepth = 0; drop.hidden = true;
+    openFile(ev.dataTransfer && ev.dataTransfer.files[0]);
+  });
+
+  // ---------- Boot ----------
+  syncBg();
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage); else window.addEventListener("resize", resize);
+  resize();
+  load(toPairs(document.getElementById("sample-dxf").textContent), "JR.dxf (exemplo genérico)", false);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
+})();
+</script>
+
+</body></html>
