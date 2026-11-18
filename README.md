@@ -16,9 +16,30 @@ Idea and project: João Raposo.
 | `index.html` | The page: hosts the CAD program, the cloud file panel and the link with Claude |
 | `cadcraft-web.js`, `cadcraft-web_bg.gz.wasm` | The CAD engine, CADCraft compiled to WebAssembly (gzip-compressed; the page inflates it) |
 | `snippets/` | Small helper script the engine loads |
+| `importers.js` | Converts DWG, PDF and DWFX to DXF in the browser before the program opens them |
+| `libredwg/` | [LibreDWG](https://www.gnu.org/software/libredwg/) compiled to WebAssembly ([@mlightcad/libredwg-web](https://github.com/mlightcad/libredwg-web) 0.9.0, GPL-3.0), used for DWG |
+| `pdfjs/` | [pdf.js](https://github.com/mozilla/pdf.js) 4.10.38 (Apache-2.0), used for PDF |
 | `viewer.html` | A simple read-only DXF viewer, used when the browser cannot start the engine |
 | `Drawing1.dxf.txt` | Generic JR line drawing opened when there is nothing in the cloud |
 | `LICENSE-MIT.txt`, `LICENSE-APACHE.txt`, `NOTICE.txt` | CADCraft's licences and notice |
+
+## Opening DWG, PDF and DWFX
+
+The CAD engine reads DXF only, so **Open from PC** (or dropping a file on the page) converts the
+other formats to DXF first, in the browser; nothing is sent anywhere. The converted drawing opens
+as `<name>.dxf`, and SAVE stores that DXF.
+
+| Format | How it is read | What you get |
+|---|---|---|
+| DXF | Opened as is | The drawing |
+| DWG (R13 to 2018) | LibreDWG writes a DXF of the whole drawing | Entities, layers, blocks, as far as LibreDWG supports them |
+| PDF | pdf.js reads each page's vector paths and text | Lines/polylines and texts in mm, one layer per page (`PDF-P1`, …), pages side by side, a sheet border on `PDF-SHEET` |
+| DWFX | Read directly: its 2D sheets are XPS pages | Lines/polylines and texts in mm, one layer per sheet (`DWFX-S1`, …), sheet borders on `DWFX-SHEET` |
+
+PDF and DWFX hold only what is printed, not CAD objects: curves become polylines, hatches and
+fills become their outlines, images are skipped, and scanned PDFs have no vectors at all.
+Classic binary DWF and 3D-only DWFX are not supported. Each converter is only downloaded the
+first time a file of its kind is opened.
 
 ## How the link with Claude works
 
@@ -44,5 +65,7 @@ anywhere else. Save and export then fall back to a normal browser download.
 ## Credits and licence
 
 The CAD engine is [CADCraft](https://github.com/storytold/cadcraft), MIT OR Apache-2.0; its
-licence files and notice must stay with any copy of the engine. The page and the Claude
+licence files and notice must stay with any copy of the engine. The DWG converter, LibreDWG, is
+GPL-3.0 (`libredwg/COPYING.txt`; source: https://github.com/mlightcad/libredwg-web); pdf.js is
+Apache-2.0 (`LICENSE-APACHE.txt`). The page and the Claude
 integration are by João Raposo.

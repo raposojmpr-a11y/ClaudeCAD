@@ -104,11 +104,11 @@
   <section id="pc_section" aria-label="PC files">
     <h3 class="section">PC files</h3>
     <div id="pc_list"></div>
-    <div class="actions"><label class="btn" for="pc_file">Open from PC</label></div>
+    <div class="actions"><label class="btn" for="pc_file" title="DXF, DWG, PDF or DWFX">Open from PC (DXF, DWG, PDF, DWFX)</label></div>
   </section>
   <footer>
     <button class="btn" id="app_zip" type="button">Download app (zip)</button>
-    <input id="pc_file" type="file" accept=".dxf">
+    <input id="pc_file" type="file" accept=".dxf,.dwg,.pdf,.dwfx">
   </footer>
 </aside>
 
@@ -321,7 +321,9 @@ async function exportToPc(name, bytes) {
 
 // ---------- Download the whole app as a zip (page, engine, licences) ----------
 const APP_FILES = ["index.html", "README.md", "cadcraft-web.js", "cadcraft-web_bg.gz.wasm", "viewer.html", "Drawing1.dxf.txt",
-  "LICENSE-MIT.txt", "LICENSE-APACHE.txt", "NOTICE.txt", "snippets/eframe-d31a8450ea12dfc1/inline0.js"];
+  "LICENSE-MIT.txt", "LICENSE-APACHE.txt", "NOTICE.txt", "snippets/eframe-d31a8450ea12dfc1/inline0.js",
+  "importers.js", "libredwg/libredwg-web.js", "libredwg/libredwg-web.gz.wasm", "libredwg/COPYING.txt",
+  "pdfjs/pdf.min.mjs", "pdfjs/pdf.worker.min.mjs"];
 
 // Build a zip archive (stored, no compression: the engine is already gzip-compressed).
 function zipFiles(entries) {
@@ -1022,24 +1024,49 @@ document.getElementById("save_export").addEventListener("click", async () => {
   await exportToPc(name, bytes);
 });
 
+// DWG, PDF and DWFX are converted to DXF here (importers.js) before the program opens them.
+async function openFromPc(file) {
+  let bytes;
+  try { bytes = new Uint8Array(await file.arrayBuffer()); }
+  catch (error) { toast("Could not read the file.", true); return; }
+  let result;
+  try {
+    const { importDrawing } = await import("./importers.js");
+    result = await importDrawing(file.name, bytes, (text) => toast(text + " " + file.name));
+  } catch (error) {
+    console.warn("import failed:", error);
+    toast("Could not open " + file.name + ": " + (error && error.message || error), true);
+    return;
+  }
+  openInApp(result.name, result.bytes);
+  pcFiles = [{ name: result.name, bytes: result.bytes, openedAt: new Date().toISOString() },
+    ...pcFiles.filter((f) => f.name !== result.name)].slice(0, 10);
+  renderPcList();
+  current = null;
+  renderList();
+  closePanel();
+  const how = result.format === "dxf" ? "" : " (" + result.format.toUpperCase() + " → DXF" + (result.summary ? ": " + result.summary : "") + ")";
+  toast("Opened from PC: " + result.name + how + ". Use SAVE to store it in the cloud.");
+}
+
 document.getElementById("pc_file").addEventListener("change", (event) => {
   const file = event.target.files[0];
   event.target.value = "";
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const bytes = new Uint8Array(reader.result);
-    openInApp(file.name, bytes);
-    pcFiles = [{ name: file.name, bytes, openedAt: new Date().toISOString() }, ...pcFiles.filter((f) => f.name !== file.name)].slice(0, 10);
-    renderPcList();
-    current = null;
-    renderList();
-    closePanel();
-    toast("Opened from PC: " + file.name + ". Use SAVE to store it in the cloud.");
-  };
-  reader.onerror = () => toast("Could not read the file.", true);
-  reader.readAsArrayBuffer(file);
+  if (file) openFromPc(file);
 });
+
+// A DWG, PDF or DWFX dropped on the page goes through the same converter (DXF is left to the program).
+const needsImport = (file) => file && /\.(dwg|pdf|dwfx)$/i.test(file.name);
+window.addEventListener("dragover", (event) => {
+  if ([...(event.dataTransfer && event.dataTransfer.items || [])].some((i) => i.kind === "file")) event.preventDefault();
+}, true);
+window.addEventListener("drop", (event) => {
+  const file = event.dataTransfer && event.dataTransfer.files[0];
+  if (!needsImport(file)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openFromPc(file);
+}, true);
 
 // Every SAVE / SAVEAS / export of the program arrives here. Nothing goes to the PC unless asked.
 canvas.addEventListener("cadcraft:save", async (event) => {
