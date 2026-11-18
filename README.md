@@ -18,6 +18,7 @@ Idea and project: João Raposo.
 | `snippets/` | Small helper script the engine loads |
 | `importers.js` | Converts DWG, PDF and DWFX to DXF in the browser before the program opens them |
 | `gocad/` | [go-cad](https://github.com/unitedrhino/go-cad) (Apache-2.0) compiled to WebAssembly, used for DWG: `main.go` is the small bridge it was built from, `wasm_exec.js` is Go's loader (BSD) |
+| `abrir-offline.*` | Offline launchers: a local server on `localhost:8765` for Windows (`.bat` + `.ps1`) and macOS/Linux (`.command`) |
 | `pdfjs/` | [pdf.js](https://github.com/mozilla/pdf.js) 4.10.38 (Apache-2.0), used for PDF |
 | `viewer.html` | A simple read-only DXF viewer, used when the browser cannot start the engine |
 | `Drawing1.dxf.txt` | Generic JR line drawing opened when there is nothing in the cloud |
@@ -55,12 +56,23 @@ and `downloads` (export to the PC).
   page runs it through the engine's control API (`window.cadcraft.request`) and writes the
   result back to the same row. Commands older than 10 minutes are discarded.
 
-## Running it outside Claude
+## Running it offline, outside Claude
 
-Serve the folder from any static web server (for example `python3 -m http.server 8765`) and
-open `http://localhost:8765/`. The CAD program works on its own; the cloud panel, the
-selection report and the chat commands need Claude's artifact capabilities and are off
-anywhere else. Save and export then fall back to a normal browser download.
+Nothing in the app comes from the internet: the CAD engine, the DWG/PDF/DWFX converters and the
+fonts are all in this folder. To use it without internet, press **Download app (zip)** once, unzip
+it, and double-click:
+
+- **Windows:** `abrir-offline.bat` (uses PowerShell, which comes with Windows).
+- **macOS / Linux:** `abrir-offline.command` (uses `python3`).
+
+It serves the folder on `http://localhost:8765/` and opens it in the browser; close the window
+(or press Ctrl+C) to stop. A browser will not run the app from a double-clicked `index.html`,
+because WebAssembly and modules need to be served over http. Any other static server works too
+(for example `python3 -m http.server 8765`).
+
+Offline, the CAD program and opening DXF, DWG, PDF and DWFX all work; the cloud panel, the
+selection report and the chat commands need Claude and are off. Save and export then fall back to
+a normal browser download.
 
 ## Credits and licence
 
