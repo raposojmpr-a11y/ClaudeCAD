@@ -17,7 +17,7 @@ Idea and project: João Raposo.
 | `cadcraft-web.js`, `cadcraft-web_bg.gz.wasm` | The CAD engine, CADCraft compiled to WebAssembly (gzip-compressed; the page inflates it) |
 | `snippets/` | Small helper script the engine loads |
 | `importers.js` | Converts DWG, PDF and DWFX to DXF in the browser before the program opens them |
-| `libredwg/` | [LibreDWG](https://www.gnu.org/software/libredwg/) compiled to WebAssembly ([@mlightcad/libredwg-web](https://github.com/mlightcad/libredwg-web) 0.9.0, GPL-3.0), used for DWG |
+| `gocad/` | [go-cad](https://github.com/unitedrhino/go-cad) (Apache-2.0) compiled to WebAssembly, used for DWG: `main.go` is the small bridge it was built from, `wasm_exec.js` is Go's loader (BSD) |
 | `pdfjs/` | [pdf.js](https://github.com/mozilla/pdf.js) 4.10.38 (Apache-2.0), used for PDF |
 | `viewer.html` | A simple read-only DXF viewer, used when the browser cannot start the engine |
 | `Drawing1.dxf.txt` | Generic JR line drawing opened when there is nothing in the cloud |
@@ -32,7 +32,7 @@ as `<name>.dxf`, and SAVE stores that DXF.
 | Format | How it is read | What you get |
 |---|---|---|
 | DXF | Opened as is | The drawing |
-| DWG (R13 to 2018) | LibreDWG writes a DXF of the whole drawing | Entities, layers, blocks, as far as LibreDWG supports them |
+| DWG (R9 to 2018) | go-cad writes a DXF of the whole drawing | Entities, layers, blocks, dimensions, texts |
 | PDF | pdf.js reads each page's vector paths and text | Lines/polylines and texts in mm, one layer per page (`PDF-P1`, …), pages side by side, a sheet border on `PDF-SHEET` |
 | DWFX | Read directly: its 2D sheets are XPS pages | Lines/polylines and texts in mm, one layer per sheet (`DWFX-S1`, …), sheet borders on `DWFX-SHEET` |
 
@@ -65,7 +65,10 @@ anywhere else. Save and export then fall back to a normal browser download.
 ## Credits and licence
 
 The CAD engine is [CADCraft](https://github.com/storytold/cadcraft), MIT OR Apache-2.0; its
-licence files and notice must stay with any copy of the engine. The DWG converter, LibreDWG, is
-GPL-3.0 (`libredwg/COPYING.txt`; source: https://github.com/mlightcad/libredwg-web); pdf.js is
-Apache-2.0 (`LICENSE-APACHE.txt`). The page and the Claude
+licence files and notice must stay with any copy of the engine. The DWG converter, go-cad, and pdf.js
+are Apache-2.0 (`LICENSE-APACHE.txt`); Go's loader `gocad/wasm_exec.js` is BSD (`gocad/GO-LICENSE.txt`).
+
+To rebuild the DWG converter: copy `gocad/main.go` to `cmd/gocad-wasm/` in a go-cad checkout
+(commit ddd91eea) and run `GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" ./cmd/gocad-wasm`,
+then gzip the result to `gocad/gocad.gz.wasm` and copy that Go version's `lib/wasm/wasm_exec.js`. The page and the Claude
 integration are by João Raposo.

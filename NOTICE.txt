@@ -53,11 +53,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 --------------------------------------------------------------------------------
 Third-party converters bundled with ClaudeCAD (loaded only when importing a file)
 
-libredwg/ - LibreDWG compiled to WebAssembly by @mlightcad/libredwg-web 0.9.0.
-  Copyright (C) Free Software Foundation, Inc. Licensed under the GNU General
-  Public License version 3 (see libredwg/COPYING.txt). Source code:
-  https://github.com/mlightcad/libredwg-web and https://git.savannah.gnu.org/git/libredwg.git
-  The wasm file is gzip-compressed, otherwise unmodified.
+gocad/ - go-cad (https://github.com/unitedrhino/go-cad, commit ddd91eea), compiled
+  to WebAssembly with Go 1.25 from gocad/main.go. Licensed under the Apache License
+  2.0 (see LICENSE-APACHE.txt). gocad/wasm_exec.js is Copyright The Go Authors,
+  BSD-style licence (see gocad/GO-LICENSE.txt).
 
 pdfjs/ - pdf.js 4.10.38 (pdfjs-dist), Copyright Mozilla Foundation.
   Licensed under the Apache License 2.0 (see LICENSE-APACHE.txt).

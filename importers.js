@@ -2,7 +2,7 @@
 // so they open in the program like any other DXF. Everything runs in the browser and each
 // converter is only downloaded the first time a file of its kind is opened.
 //
-//   DWG  -> libredwg (GPL-3.0, libredwg/), which writes a full DXF of the drawing.
+//   DWG  -> go-cad (Apache-2.0, gocad/), which writes a full DXF of the drawing.
 //   PDF  -> pdf.js (Apache-2.0, pdfjs/): vector paths become polylines, text becomes TEXT.
 //   DWFX -> read here: a DWFX is a zip whose 2D sheets are XPS FixedPages (paths and glyphs).
 //
@@ -192,38 +192,32 @@ async function fetchGzip(url) {
   return new Uint8Array(await new Response(inflated).arrayBuffer());
 }
 
-// ---------- DWG (libredwg) ----------
+// ---------- DWG (go-cad) ----------
 
-let libredwgPromise = null;
+// go-cad (github.com/unitedrhino/go-cad, Apache-2.0) compiled to WebAssembly with gocad/main.go:
+// it reads DWG R9 to 2018 and writes a DXF of the whole drawing.
+let gocadPromise = null;
 
-function loadLibredwg() {
-  libredwgPromise ??= (async () => {
-    const [{ default: createModule }, wasmBinary] = await Promise.all([
-      import(here("./libredwg/libredwg-web.js")),
-      fetchGzip(here("./libredwg/libredwg-web.gz.wasm")),
-    ]);
-    return createModule({ wasmBinary, print: (t) => console.debug("libredwg:", t), printErr: (t) => console.debug("libredwg:", t) });
+function loadGocad() {
+  gocadPromise ??= (async () => {
+    const [, wasm] = await Promise.all([import(here("./gocad/wasm_exec.js")), fetchGzip(here("./gocad/gocad.gz.wasm"))]);
+    const go = new globalThis.Go();
+    const { instance } = await WebAssembly.instantiate(wasm, go.importObject);
+    go.run(instance); // never resolves: the Go program stays alive to answer calls
+    if (typeof globalThis.gocadDwgToDxf !== "function") throw new Error("the DWG converter did not start");
+    return globalThis.gocadDwgToDxf;
   })();
-  libredwgPromise.catch(() => { libredwgPromise = null; });
-  return libredwgPromise;
+  gocadPromise.catch(() => { gocadPromise = null; });
+  return gocadPromise;
 }
 
 async function dwgToDxf(bytes) {
-  const lib = await loadLibredwg();
-  const input = "import.dwg", output = "import.dxf";
-  const remove = (f) => { try { if (lib.FS.analyzePath(f, false).exists) lib.FS.unlink(f); } catch (e) { /* ignore */ } };
-  try {
-    lib.FS.writeFile(input, bytes);
-    const code = lib.dwg_write_dxf(input, output);
-    let out = null;
-    try { out = lib.FS.readFile(output); } catch (e) { out = null; }
-    // libredwg reports recoverable problems as low error bits; only fail when nothing came out.
-    if (!out || out.length < 32) throw new Error("libredwg could not read this DWG (error " + code + ")");
-    return out.slice();
-  } finally {
-    remove(input);
-    remove(output);
+  const convert = await loadGocad();
+  const result = convert(bytes);
+  if (!result || result.error || !result.dxf || result.dxf.length < 32) {
+    throw new Error("could not read this DWG" + (result && result.error ? " (" + result.error + ")" : ""));
   }
+  return result.dxf;
 }
 
 // ---------- PDF (pdf.js) ----------
